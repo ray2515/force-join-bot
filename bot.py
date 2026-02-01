@@ -3,8 +3,8 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 API_ID = int(os.getenv("API_ID"))
-API_HASH = os.getenv("add73db61e292c1702d16b0f664dbd0f")
-BOT_TOKEN = os.getenv("8328949950:AAHuiUUoE5oNAcKdzwIhjBZlEljRb67gCFY")
+API_HASH = os.getenv("API_HASH")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 CHANNEL_ID = -1002487079466  # your private channel ID
 INVITE_LINK = "https://t.me/+IG7paWpyaLpiOWM9"
