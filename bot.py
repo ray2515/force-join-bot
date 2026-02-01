@@ -2,7 +2,7 @@ import os
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-API_ID = int(os.getenv("37540714"))
+API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("add73db61e292c1702d16b0f664dbd0f")
 BOT_TOKEN = os.getenv("8328949950:AAHuiUUoE5oNAcKdzwIhjBZlEljRb67gCFY")
 
