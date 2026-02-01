@@ -17,7 +17,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 # 📢 CHANNEL SETTINGS
 # ==============================
 # Private channel ID (example: -1001234567890)
-CHANNEL_ID = int(os.getenv("-1002487079466"))
+CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
 
 # Private channel invite link
 INVITE_LINK = os.getenv("https://t.me/+IG7paWpyaLpiOWM9")
