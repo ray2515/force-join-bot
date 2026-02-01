@@ -1,16 +1,16 @@
-import os
 from pyrogram import Client, filters
 from pyrogram.types import ChatPermissions, InlineKeyboardMarkup, InlineKeyboardButton
 
 # ==============================
-# 🔐 ENV VARIABLES
+# 🔐 HARD-CODED SETTINGS
 # ==============================
-# Make sure these are set in Railway Service → Variables
-API_ID = int(os.getenv("API_ID"))
-API_HASH = os.getenv("API_HASH")
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHANNEL_ID = int(os.getenv("CHANNEL_ID"))      # e.g., -1001234567890
-INVITE_LINK = os.getenv("INVITE_LINK")        # e.g., https://t.me/+xxxx
+
+API_ID = 37540714  # your api_id from my.telegram.org
+API_HASH = "add73db61e292c1702d16b0f664dbd0f"  # your api_hash
+BOT_TOKEN = "8328949950:AAHuiUUoE5oNAcKdzwIhjBZlEljRb67gCFY"  # your bot token from @BotFather
+
+CHANNEL_ID = -1002487079466  # your private channel id (starts with -100)
+INVITE_LINK = "https://t.me/+IG7paWpyaLpiOWM9"  # your private channel invite link
 
 # ==============================
 # 🤖 BOT INIT
@@ -35,13 +35,12 @@ async def force_join(client, message):
 
     try:
         member = await client.get_chat_member(CHANNEL_ID, user_id)
-
         if member.status in ["left", "kicked"]:
             raise Exception
 
     except:
         try:
-            # 🔒 PERMANENT MUTE
+            # PERMANENT MUTE until they join
             await client.restrict_chat_member(
                 chat_id=chat_id,
                 user_id=user_id,
@@ -64,37 +63,43 @@ async def force_join(client, message):
             print("Mute failed:", e)
 
 # ==============================
-# 🔓 UNMUTE COMMAND AFTER JOIN
+# 🔓 AUTOMATIC UNMUTE WHEN USER JOINS CHANNEL
 # ==============================
-@app.on_message(filters.command("unmute") & filters.group)
-async def unmute_user(client, message):
-    user_id = message.from_user.id
-    chat_id = message.chat.id
+@app.on_chat_member_updated(filters.chat(CHANNEL_ID))
+async def auto_unmute(client, update):
+    user_id = update.from_user.id
+    status = update.new_chat_member.status
 
-    try:
-        member = await client.get_chat_member(CHANNEL_ID, user_id)
+    # Only unmute if the user joined the channel
+    if status in ["member", "administrator", "creator"]:
+        try:
+            # Get all groups where bot is admin
+            async for dialog in client.get_dialogs():
+                if dialog.chat.type in ["supergroup", "group"]:
+                    try:
+                        # Try to unmute user in each group
+                        await client.restrict_chat_member(
+                            chat_id=dialog.chat.id,
+                            user_id=user_id,
+                            permissions=ChatPermissions(
+                                can_send_messages=True,
+                                can_send_media_messages=True,
+                                can_send_other_messages=True,
+                                can_add_web_page_previews=True
+                            )
+                        )
+                        # Optional: send confirmation
+                        await client.send_message(
+                            chat_id=dialog.chat.id,
+                            text=f"✅ {update.from_user.mention} has joined the channel and is now unmuted!"
+                        )
+                    except Exception:
+                        pass  # skip groups where bot can't unmute
 
-        if member.status not in ["left", "kicked"]:
-            await client.restrict_chat_member(
-                chat_id=chat_id,
-                user_id=user_id,
-                permissions=ChatPermissions(
-                    can_send_messages=True,
-                    can_send_media_messages=True,
-                    can_send_other_messages=True,
-                    can_add_web_page_previews=True
-                )
-            )
-            await message.reply("✅ You joined the channel. You are unmuted.")
-        else:
-            await message.reply("❌ Join the channel first.")
-
-    except Exception as e:
-        print("Unmute error:", e)
+        except Exception as e:
+            print("Auto-unmute failed:", e)
 
 # ==============================
 # 🚀 START BOT
 # ==============================
 app.run()
-
-
