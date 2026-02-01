@@ -1,27 +1,16 @@
 import os
 from pyrogram import Client, filters
-from pyrogram.types import (
-    ChatPermissions,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton
-)
+from pyrogram.types import ChatPermissions, InlineKeyboardMarkup, InlineKeyboardButton
 
 # ==============================
-# 🔐 REQUIRED ENV VARIABLES
+# 🔐 ENV VARIABLES
 # ==============================
+# Make sure these are set in Railway Service → Variables
 API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-
-# ==============================
-# 📢 CHANNEL SETTINGS
-# ==============================
-# Private channel ID (example: -1001234567890)
-print("DEBUG CHANNEL_ID:", os.getenv("CHANNEL_ID"))
-CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
-
-# Private channel invite link
-INVITE_LINK = os.getenv("https://t.me/+IG7paWpyaLpiOWM9")
+CHANNEL_ID = int(os.getenv("CHANNEL_ID"))      # e.g., -1001234567890
+INVITE_LINK = os.getenv("INVITE_LINK")        # e.g., https://t.me/+xxxx
 
 # ==============================
 # 🤖 BOT INIT
@@ -52,6 +41,7 @@ async def force_join(client, message):
 
     except:
         try:
+            # 🔒 PERMANENT MUTE
             await client.restrict_chat_member(
                 chat_id=chat_id,
                 user_id=user_id,
@@ -64,8 +54,7 @@ async def force_join(client, message):
             )
 
             await message.reply(
-                "🚫 You must join our channel to chat here.\n\n"
-                "🔒 You are muted until you join the channel.",
+                "🚫 You must join our channel to chat here.\n🔒 You are muted until you join.",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("✅ Join Channel", url=INVITE_LINK)]
                 ])
@@ -75,7 +64,7 @@ async def force_join(client, message):
             print("Mute failed:", e)
 
 # ==============================
-# 🔓 UNMUTE AFTER JOIN COMMAND
+# 🔓 UNMUTE COMMAND AFTER JOIN
 # ==============================
 @app.on_message(filters.command("unmute") & filters.group)
 async def unmute_user(client, message):
@@ -96,8 +85,7 @@ async def unmute_user(client, message):
                     can_add_web_page_previews=True
                 )
             )
-
-            await message.reply("✅ You have joined the channel. You are unmuted.")
+            await message.reply("✅ You joined the channel. You are unmuted.")
         else:
             await message.reply("❌ Join the channel first.")
 
@@ -108,4 +96,5 @@ async def unmute_user(client, message):
 # 🚀 START BOT
 # ==============================
 app.run()
+
 
