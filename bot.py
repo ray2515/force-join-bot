@@ -1,139 +1,70 @@
-from pyrogram import Client, filters
+from pyrogram import Client, filters, errors
 from pyrogram.types import ChatPermissions, InlineKeyboardMarkup, InlineKeyboardButton
 
-# ==============================
-# 🔐 HARD-CODED SETTINGS
-# ==============================
+# --- CONFIGURATION ---
+API_ID = 37540714          
+API_HASH = "add73db61e292c1702d16b0f664dbd0f"    
+BOT_TOKEN = "8328949950:AAHuiUUoE5oNAcKdzwIhjBZlEljRb67gCFY"  
+# For private channels, use the Peer ID (starts with -100)
+PRIVATE_CHANNEL_ID = -1002487079466 
+INVITE_LINK = "https://t.me/+IG7paWpyaLpiOWM9"
 
-API_ID = 37540714  # your api_id from my.telegram.org
-API_HASH = "add73db61e292c1702d16b0f664dbd0f"  # your api_hash
-BOT_TOKEN = "8328949950:AAHuiUUoE5oNAcKdzwIhjBZlEljRb67gCFY"  # your bot token from @BotFather
+app = Client("MuteGatekeeper", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-CHANNEL_ID = -1002487079466  # your private channel id (starts with -100)
-INVITE_LINK = "https://t.me/+IG7paWpyaLpiOWM9"  # your private channel invite link
-
-# ==============================
-# 🤖 BOT INIT
-# ==============================
-app = Client(
-    "force_join_bot",
-    api_id=API_ID,
-    api_hash=API_HASH,
-    bot_token=BOT_TOKEN
+# Permission sets
+MUTE_PERMISSIONS = ChatPermissions(can_send_messages=False)
+UNMUTE_PERMISSIONS = ChatPermissions(
+    can_send_messages=True,
+    can_send_media_messages=True,
+    can_send_other_messages=True,
+    can_add_web_page_previews=True
 )
 
-# ==============================
-# 🔒 FORCE JOIN + PERMANENT MUTE
-# ==============================
-@app.on_message(filters.group & ~filters.service)
-async def force_join(client, message):
-    if not message.from_user:
-        return
+async def check_if_joined(user_id):
+    try:
+        member = await app.get_chat_member(PRIVATE_CHANNEL_ID, user_id)
+        if member.status in ["member", "administrator", "creator"]:
+            return True
+    except errors.UserNotParticipant:
+        return False
+    except Exception as e:
+        print(f"Check Error: {e}")
+    return False
 
+@app.on_message(filters.group & ~filters.service)
+async def enforce_mute(client, message):
     user_id = message.from_user.id
     chat_id = message.chat.id
 
+    # If they are already subscribed, do nothing
+    if await check_if_joined(user_id):
+        return
+
+    # If not subscribed, mute them and notify
     try:
-        member = await client.get_chat_member(CHANNEL_ID, user_id)
-        if member.status in ["left", "kicked"]:
-            raise Exception
+        await client.restrict_chat_member(chat_id, user_id, MUTE_PERMISSIONS)
+        
+        button = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🔓 Join Private Channel", url=INVITE_LINK)
+        ]])
+        
+        await message.reply_text(
+            f"🔇 **{message.from_user.first_name}, you have been muted.**\n\n"
+            "You cannot speak here until you join our private updates channel. "
+            "Once you join, you will be unmuted automatically on your next attempt to chat.",
+            reply_markup=button
+        )
+        # Optional: Delete the user's message that triggered the mute
+        await message.delete()
+        
+    except errors.ChatAdminRequired:
+        print("Error: Bot must be admin with 'Restrict Members' permission.")
 
-    except:
-        try:
-            # PERMANENT MUTE until they join
-            await client.restrict_chat_member(
-                chat_id=chat_id,
-                user_id=user_id,
-                permissions=ChatPermissions(
-                    can_send_messages=False,
-                    can_send_media_messages=False,
-                    can_send_other_messages=False,
-                    can_add_web_page_previews=False
-                )
-            )
+# Handler to unmute users who have joined
+@app.on_message(filters.group & filters.regex(r".*"))
+async def check_for_unmute(client, message):
+    user_id = message.from_user.id
+    if await check_if_joined(user_id):
+        await client.restrict_chat_member(message.chat.id, user_id, UNMUTE_PERMISSIONS)
 
-            await message.reply(
-                "🚫 You must join our channel to chat here.\n🔒 You are muted until you join.",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("✅ Join Channel", url=INVITE_LINK)]
-                ])
-            )
-
-        except Exception as e:
-            print("Mute failed:", e)
-
-# ==============================
-# 🔓 AUTOMATIC UNMUTE WHEN USER JOINS CHANNEL
-# ==============================
-@app.on_chat_member_updated(filters.chat(CHANNEL_ID))
-async def auto_unmute(client, update):
-    user_id = update.from_user.id
-    status = update.new_chat_member.status
-
-    # Only unmute if user joined the channel
-    if status in ["member", "administrator", "creator"]:
-        try:
-            async for dialog in client.get_dialogs():
-                if dialog.chat.type in ["supergroup", "group"]:
-                    try:
-                        # Check if user is currently muted
-                        member_info = await client.get_chat_member(dialog.chat.id, user_id)
-                        if member_info.can_send_messages is False or member_info.status == "restricted":
-                            # Unmute the user
-                            await client.restrict_chat_member(
-                                chat_id=dialog.chat.id,
-                                user_id=user_id,
-                                permissions=ChatPermissions(
-                                    can_send_messages=True,
-                                    can_send_media_messages=True,
-                                    can_send_other_messages=True,
-                                    can_add_web_page_previews=True
-                                )
-                            )
-                            # Optional confirmation message
-                            await client.send_message(
-                                chat_id=dialog.chat.id,
-                                text=f"✅ {update.from_user.mention} has joined the channel and is now unmuted!"
-                            )
-                    except Exception:
-                        pass  # skip groups where bot can't unmute
-        except Exception as e:
-            print("Auto-unmute failed:", e)
-
-# ==============================
-# 🔓 INITIAL UNMUTE FOR EXISTING MEMBERS
-# ==============================
-
-    """Unmute all users who already joined the channel before bot start."""
-    try:
-        # Get all group dialogs
-        async for dialog in client.get_dialogs():
-            if dialog.chat.type in ["supergroup", "group"]:
-                async for member in client.get_chat_members(dialog.chat.id):
-                    if member.user.is_bot:
-                        continue
-                    # Check if user is in the channel
-                    try:
-                        channel_member = await client.get_chat_member(CHANNEL_ID, member.user.id)
-                        if channel_member.status not in ["left", "kicked"]:
-                            # Unmute user if restricted
-                            if member.can_send_messages is False or member.status == "restricted":
-                                await client.restrict_chat_member(
-                                    chat_id=dialog.chat.id,
-                                    user_id=member.user.id,
-                                    permissions=ChatPermissions(
-                                        can_send_messages=True,
-                                        can_send_media_messages=True,
-                                        can_send_other_messages=True,
-                                        can_add_web_page_previews=True
-                                    )
-                                )
-                    except:
-                        pass
-    except Exception as e:
-        print("Initial unmute failed:", e)
-
-# ==============================
-# 🚀 START BOT
-# ==============================
 app.run()
