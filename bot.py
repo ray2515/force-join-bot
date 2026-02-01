@@ -70,34 +70,69 @@ async def auto_unmute(client, update):
     user_id = update.from_user.id
     status = update.new_chat_member.status
 
-    # Only unmute if the user joined the channel
+    # Only unmute if user joined the channel
     if status in ["member", "administrator", "creator"]:
         try:
-            # Get all groups where bot is admin
             async for dialog in client.get_dialogs():
                 if dialog.chat.type in ["supergroup", "group"]:
                     try:
-                        # Try to unmute user in each group
-                        await client.restrict_chat_member(
-                            chat_id=dialog.chat.id,
-                            user_id=user_id,
-                            permissions=ChatPermissions(
-                                can_send_messages=True,
-                                can_send_media_messages=True,
-                                can_send_other_messages=True,
-                                can_add_web_page_previews=True
+                        # Check if user is currently muted
+                        member_info = await client.get_chat_member(dialog.chat.id, user_id)
+                        if member_info.can_send_messages is False or member_info.status == "restricted":
+                            # Unmute the user
+                            await client.restrict_chat_member(
+                                chat_id=dialog.chat.id,
+                                user_id=user_id,
+                                permissions=ChatPermissions(
+                                    can_send_messages=True,
+                                    can_send_media_messages=True,
+                                    can_send_other_messages=True,
+                                    can_add_web_page_previews=True
+                                )
                             )
-                        )
-                        # Optional: send confirmation
-                        await client.send_message(
-                            chat_id=dialog.chat.id,
-                            text=f"✅ {update.from_user.mention} has joined the channel and is now unmuted!"
-                        )
+                            # Optional confirmation message
+                            await client.send_message(
+                                chat_id=dialog.chat.id,
+                                text=f"✅ {update.from_user.mention} has joined the channel and is now unmuted!"
+                            )
                     except Exception:
                         pass  # skip groups where bot can't unmute
-
         except Exception as e:
             print("Auto-unmute failed:", e)
+
+# ==============================
+# 🔓 INITIAL UNMUTE FOR EXISTING MEMBERS
+# ==============================
+@app.on_client_ready()
+async def initial_unmute(client):
+    """Unmute all users who already joined the channel before bot start."""
+    try:
+        # Get all group dialogs
+        async for dialog in client.get_dialogs():
+            if dialog.chat.type in ["supergroup", "group"]:
+                async for member in client.get_chat_members(dialog.chat.id):
+                    if member.user.is_bot:
+                        continue
+                    # Check if user is in the channel
+                    try:
+                        channel_member = await client.get_chat_member(CHANNEL_ID, member.user.id)
+                        if channel_member.status not in ["left", "kicked"]:
+                            # Unmute user if restricted
+                            if member.can_send_messages is False or member.status == "restricted":
+                                await client.restrict_chat_member(
+                                    chat_id=dialog.chat.id,
+                                    user_id=member.user.id,
+                                    permissions=ChatPermissions(
+                                        can_send_messages=True,
+                                        can_send_media_messages=True,
+                                        can_send_other_messages=True,
+                                        can_add_web_page_previews=True
+                                    )
+                                )
+                    except:
+                        pass
+    except Exception as e:
+        print("Initial unmute failed:", e)
 
 # ==============================
 # 🚀 START BOT
