@@ -103,8 +103,7 @@ async def auto_unmute(client, update):
 # ==============================
 # 🔓 INITIAL UNMUTE FOR EXISTING MEMBERS
 # ==============================
-@app.on_client_ready()
-async def initial_unmute(client):
+
     """Unmute all users who already joined the channel before bot start."""
     try:
         # Get all group dialogs
