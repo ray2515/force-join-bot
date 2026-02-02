@@ -1,70 +1,151 @@
-from pyrogram import Client, filters, errors
-from pyrogram.types import ChatPermissions, InlineKeyboardMarkup, InlineKeyboardButton
-
-# --- CONFIGURATION ---
-API_ID = 37540714          
-API_HASH = "add73db61e292c1702d16b0f664dbd0f"    
-BOT_TOKEN = "8328949950:AAHuiUUoE5oNAcKdzwIhjBZlEljRb67gCFY"  
-# For private channels, use the Peer ID (starts with -100)
-PRIVATE_CHANNEL_ID = -1002487079466 
-INVITE_LINK = "https://t.me/+IG7paWpyaLpiOWM9"
-
-app = Client("MuteGatekeeper", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
-
-# Permission sets
-MUTE_PERMISSIONS = ChatPermissions(can_send_messages=False)
-UNMUTE_PERMISSIONS = ChatPermissions(
-    can_send_messages=True,
-    can_send_media_messages=True,
-    can_send_other_messages=True,
-    can_add_web_page_previews=True
+import time
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ChatPermissions,
+)
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters,
 )
 
-async def check_if_joined(user_id):
+# ---------------- CONFIG ----------------
+BOT_TOKEN = "8328949950:AAHuiUUoE5oNAcKdzwIhjBZlEljRb67gCFY"    #bot token paste here
+CHANNEL = "@popularitytalks"     # Change to your real CHANNEL username
+MUTE_SECONDS = 30             # 30 seconds
+# ----------------------------------------
+
+# Full permissions for unmuting
+FULL_PERMS = ChatPermissions(
+    can_send_messages=True,
+    can_send_media_messages=True,
+    can_send_polls=True,
+    can_send_other_messages=True,
+    can_add_web_page_previews=True,
+    can_invite_users=True,
+)
+
+async def send_force_sub_message(chat_id, user_id, user_name, context):
+    """Mute + send subscribe message"""
+    until_date = int(time.time()) + MUTE_SECONDS
+
     try:
-        member = await app.get_chat_member(PRIVATE_CHANNEL_ID, user_id)
-        if member.status in ["member", "administrator", "creator"]:
-            return True
-    except errors.UserNotParticipant:
-        return False
-    except Exception as e:
-        print(f"Check Error: {e}")
-    return False
+        await context.bot.restrict_chat_member(
+            chat_id=chat_id,
+            user_id=user_id,
+            permissions=ChatPermissions(can_send_messages=False),
+            until_date=until_date,
+        )
+    except:
+        pass
 
-@app.on_message(filters.group & ~filters.service)
-async def enforce_mute(client, message):
-    user_id = message.from_user.id
-    chat_id = message.chat.id
+    buttons = [
+        [InlineKeyboardButton("📢 Subscribe karo Channel", url=f"https://t.me/{CHANNEL.replace('@', '')}")],
+        [InlineKeyboardButton("✅ KARLIYA BABU", callback_data=f"checksub:{chat_id}:{user_id}")]
+    ]
 
-    # If they are already subscribed, do nothing
-    if await check_if_joined(user_id):
+    text = (
+        f"👋 Hi <b>{user_name}</b>!\n\n"
+        f"You must join our channel {CHANNEL} to chat here.\n"
+        f"You are muted for 30 seconds.\n\n"
+        f"After subscribing, click <b>✅ KARLIYA BABU</b>."
+    )
+
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        reply_markup=InlineKeyboardMarkup(buttons),
+        parse_mode="HTML",
+    )
+
+
+async def new_member_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle new users joining"""
+    for user in update.message.new_chat_members:
+        if user.is_bot:
+            continue
+        await send_force_sub_message(
+            chat_id=update.effective_chat.id,
+            user_id=user.id,
+            user_name=user.full_name,
+            context=context,
+        )
+
+
+async def message_checker(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Check OLD USERS when they send a message"""
+    user = update.effective_user
+    chat_id = update.effective_chat.id
+    user_id = user.id
+
+    # Ignore bot messages
+    if user.is_bot:
         return
 
-    # If not subscribed, mute them and notify
+    # Check subscription
     try:
-        await client.restrict_chat_member(chat_id, user_id, MUTE_PERMISSIONS)
-        
-        button = InlineKeyboardMarkup([[
-            InlineKeyboardButton("🔓 Join Private Channel", url=INVITE_LINK)
-        ]])
-        
-        await message.reply_text(
-            f"🔇 **{message.from_user.first_name}, you have been muted.**\n\n"
-            "You cannot speak here until you join our private updates channel. "
-            "Once you join, you will be unmuted automatically on your next attempt to chat.",
-            reply_markup=button
-        )
-        # Optional: Delete the user's message that triggered the mute
-        await message.delete()
-        
-    except errors.ChatAdminRequired:
-        print("Error: Bot must be admin with 'Restrict Members' permission.")
+        member = await context.bot.get_chat_member(CHANNEL, user_id)
+        if member.status not in ("member", "administrator", "creator"):
+            # Not subscribed → mute + send message
+            await send_force_sub_message(chat_id, user_id, user.full_name, context)
+            return
+    except:
+        return  # Bot not admin in channel
 
-# Handler to unmute users who have joined
-@app.on_message(filters.group & filters.regex(r".*"))
-async def check_for_unmute(client, message):
-    user_id = message.from_user.id
-    if await check_if_joined(user_id):
-        await client.restrict_chat_member(message.chat.id, user_id, UNMUTE_PERMISSIONS)
+    # Subscribed → allow message (do nothing)
 
-app.run()
+
+async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle 'I SUBSCRIBED' button"""
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data.split(":")
+    if len(data) != 3:
+        return
+
+    _, chat_id, user_id = data
+    chat_id = int(chat_id)
+    user_id = int(user_id)
+
+    if query.from_user.id != user_id:
+        return await query.answer("This is not for you.", show_alert=True)
+
+    # Re-check subscription
+    try:
+        member = await context.bot.get_chat_member(CHANNEL, user_id)
+        if member.status in ("member", "administrator", "creator"):
+            # Unmute
+            await context.bot.restrict_chat_member(
+                chat_id=chat_id,
+                user_id=user_id,
+                permissions=FULL_PERMS,
+            )
+            await query.edit_message_text("✅ You are subscribed! You are unmuted now.")
+        else:
+            await query.answer("❗️ You haven't subscribed yet.", show_alert=True)
+    except:
+        await query.answer("Bot must be admin in channel.", show_alert=True)
+        async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Force-subscribe bot active!")
+
+
+def main():
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, new_member_handler))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_checker))
+    app.add_handler(CallbackQueryHandler(callback_handler))
+
+    print("Bot running...")
+    app.run_polling(allowed_updates=["message", "callback_query", "chat_member"])
+
+
+if name == "main":
+    main()
